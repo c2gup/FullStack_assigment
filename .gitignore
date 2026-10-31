@@ -1,33 +1,22 @@
 # Dependencies
 node_modules/
-.pnp
-.pnp.js
+**/node_modules/
 
-# Environment Variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Production Build Artifacts
+# Build files
 dist/
+**/dist/
 build/
-coverage/
+**/build/
+
+# Environment variables
+.env
+.env.*
+!.env.example
 
 # Logs
+*.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-.pnpm-debug.log*
 
-# Editor & OS files
+# OS files
 .DS_Store
-.idea/
-.vscode/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db

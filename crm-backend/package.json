@@ -9,6 +9,9 @@
     "test": "jest --runInBand --detectOpenHandles --forceExit",
     "seed": "node src/utils/seed.js"
   },
+
+
+  
   "keywords": [
     "crm",
     "lead-management",

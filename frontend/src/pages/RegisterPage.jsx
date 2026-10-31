@@ -1,251 +1,218 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Lock, Mail, User, Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { getErrorMessage } from '../services/api';
-import toast from 'react-hot-toast';
-
-const registerValidationSchema = z
-  .object({
-    name: z
-      .string()
-      .trim()
-      .min(2, 'Name must be at least 2 characters long')
-      .max(100, 'Name must not exceed 100 characters'),
-    email: z
-      .string()
-      .trim()
-      .toLowerCase()
-      .min(1, 'Email is required')
-      .email('Please enter a valid email address'),
-    password: z
-      .string()
-      .min(6, 'Password must be at least 6 characters long')
-      .max(100, 'Password must not exceed 100 characters'),
-    confirmPassword: z.string().min(1, 'Please confirm your password'),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ['confirmPassword'],
-  });
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Loader2, Phone } from "lucide-react";
+import { StatusBar } from "../components/common/StatusBar";
+import { NumericKeypad } from "../components/common/NumericKeypad";
+import { Toast } from "../components/common/Toast";
+import { useAuth } from "../context/AuthContext";
+import { registerUser } from "../services/authService";
+import { extractErrorMessage } from "../services/api";
 
 export const RegisterPage = () => {
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [apiError, setApiError] = useState('');
-  const { register: registerAuth } = useAuth();
   const navigate = useNavigate();
+  const { savePendingPhone } = useAuth();
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm({
-    resolver: zodResolver(registerValidationSchema),
-    defaultValues: {
-      name: '',
-      email: '',
-      password: '',
-      confirmPassword: '',
-    },
-  });
+  const [dialCode, setDialCode] = useState("+91");
+  const [phoneNumber, setPhoneNumber] = useState("9818979450"); // Pre-filled with staging test number
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState({ message: "", type: "info" });
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const onSubmit = async (data) => {
-    setApiError('');
-    try {
-      await registerAuth({
-        name: data.name,
-        email: data.email,
-        password: data.password,
+  const handleKeyPress = (num) => {
+    if (phoneNumber.length < 10) {
+      setPhoneNumber((prev) => prev + num);
+      setErrorMsg("");
+    }
+  };
+
+  const handleDelete = () => {
+    setPhoneNumber((prev) => prev.slice(0, -1));
+    setErrorMsg("");
+  };
+
+  const handleInputChange = (e) => {
+    const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+    setPhoneNumber(val);
+    setErrorMsg("");
+  };
+
+  const handleGetOtp = async (e) => {
+    if (e) e.preventDefault();
+
+    if (!phoneNumber || phoneNumber.length < 10) {
+      setErrorMsg("Please enter a valid 10-digit mobile number");
+      setToast({
+        message: "Please enter a valid 10-digit mobile number",
+        type: "error",
       });
-      toast.success('Registration successful! Welcome to the CRM team.');
-      navigate('/dashboard', { replace: true });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setErrorMsg("");
+      const response = await registerUser(phoneNumber, dialCode);
+
+      // Save pending phone to context for OTP verification screen
+      savePendingPhone({ phone: phoneNumber, dialCode });
+
+      setToast({
+        message: response.data || "OTP sent successfully!",
+        type: "success",
+      });
+
+      // Navigate to OTP verification screen
+      setTimeout(() => {
+        navigate("/verify-otp");
+      }, 400);
     } catch (err) {
-      const message = getErrorMessage(err);
-      setApiError(message);
-      toast.error(message);
+      console.error("Registration failed:", err);
+      const errMsg = extractErrorMessage(
+        err,
+        "Failed to send OTP. Please check mobile number.",
+      );
+      setErrorMsg(errMsg);
+      setToast({
+        message: errMsg,
+        type: "error",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <Link to="/" className="inline-flex items-center gap-2.5 mb-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-700 to-brand-500 flex items-center justify-center text-white shadow-lg shadow-brand-500/25 font-bold text-xl">
-            ED
+    <div className="flex flex-col gap-6 bg-white select-none">
+      <StatusBar />
+
+      {/* Main Content Container */}
+      <div className=" flex flex-col justify-between px-6 pt-2 pb-1">
+        {/* Top Header & Back Button */}
+        <div>
+          <button
+            type="button"
+            onClick={() => {
+              if (window.history.length > 1) navigate(-1);
+            }}
+            className="w-10 h-10 -ml-2 rounded-full flex items-center justify-center text-fastor-orange hover:bg-orange-50 active:scale-95 transition"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="w-6 h-6 stroke-[2.5]" />
+          </button>
+
+          {/* Title & Description matching Figma */}
+          <div className="mt-8">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-fastor-dark tracking-tight">
+              Sign Up to Fastor
+            </h1>
+            <p className="text-sm text-gray-500 mt-2 font-normal leading-relaxed">
+              Let us know your mobile number and we will send you an OTP for
+              verification.
+            </p>
           </div>
-        </Link>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-          Create Counselor Account
-        </h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Register to manage incoming student queries and course admissions
-        </p>
-      </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
-        <div className="bg-white py-8 px-6 sm:px-10 shadow-xl shadow-slate-200/50 rounded-3xl border border-slate-200">
-          {apiError && (
-            <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-start gap-2.5">
-              <span className="font-semibold flex-shrink-0">Registration Error:</span>
-              <span>{apiError}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-            {/* Full Name */}
-            <div>
-              <label htmlFor="name" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Full Name
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <User className="w-4 h-4" />
-                </div>
-                <input
-                  id="name"
-                  type="text"
-                  autoComplete="name"
-                  {...register('name')}
-                  placeholder="e.g. Sarah Jenkins"
-                  className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 border rounded-xl text-sm placeholder-slate-400 text-slate-900 focus:outline-none focus:ring-2 transition-all ${
-                    errors.name
-                      ? 'border-red-300 focus:ring-red-500 bg-red-50/30'
-                      : 'border-slate-200 focus:ring-brand-500 focus:bg-white'
-                  }`}
-                />
+          {/* Form */}
+          <form onSubmit={handleGetOtp} className="mt-8">
+            {/* Input Box matching Figma Screen 1 */}
+            <div
+              className={`flex items-center px-4 py-3 rounded-2xl border transition-all ${
+                errorMsg
+                  ? "border-red-400 bg-red-50/20"
+                  : "border-gray-200 bg-gray-50/70 focus-within:border-fastor-orange focus-within:bg-white focus-within:ring-2 focus-within:ring-fastor-orange/15"
+              }`}
+            >
+              {/* Dial code */}
+              <div className="flex items-center space-x-1 pr-3">
+                <span className="text-base font-bold text-fastor-dark">
+                  {dialCode}
+                </span>
               </div>
-              {errors.name && (
-                <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.name.message}</p>
-              )}
-            </div>
 
-            {/* Email Address */}
-            <div>
-              <label htmlFor="email" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Work Email Address
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Mail className="w-4 h-4" />
-                </div>
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  {...register('email')}
-                  placeholder="counselor@edtech.com"
-                  className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 border rounded-xl text-sm placeholder-slate-400 text-slate-900 focus:outline-none focus:ring-2 transition-all ${
-                    errors.email
-                      ? 'border-red-300 focus:ring-red-500 bg-red-50/30'
-                      : 'border-slate-200 focus:ring-brand-500 focus:bg-white'
-                  }`}
-                />
-              </div>
-              {errors.email && (
-                <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.email.message}</p>
-              )}
-            </div>
+              {/* Divider */}
+              <div className="w-[1.5px] h-6 bg-fastor-orange/80 mr-3"></div>
 
-            {/* Password */}
-            <div>
-              <label htmlFor="password" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  {...register('password')}
-                  placeholder="Minimum 6 characters"
-                  className={`w-full pl-10 pr-10 py-2.5 bg-slate-50 border rounded-xl text-sm placeholder-slate-400 text-slate-900 focus:outline-none focus:ring-2 transition-all ${
-                    errors.password
-                      ? 'border-red-300 focus:ring-red-500 bg-red-50/30'
-                      : 'border-slate-200 focus:ring-brand-500 focus:bg-white'
-                  }`}
-                />
+              {/* Mobile number input */}
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={handleInputChange}
+                placeholder="- 00000"
+                maxLength={10}
+                className="w-full bg-transparent text-base font-semibold text-fastor-dark placeholder:text-gray-400 focus:outline-none tracking-wider"
+              />
+
+              {phoneNumber && (
                 <button
                   type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                  onClick={() => setPhoneNumber("")}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-1"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  Clear
                 </button>
-              </div>
-              {errors.password && (
-                <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.password.message}</p>
               )}
             </div>
 
-            {/* Confirm Password */}
-            <div>
-              <label htmlFor="confirmPassword" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <input
-                  id="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  {...register('confirmPassword')}
-                  placeholder="Re-enter your password"
-                  className={`w-full pl-10 pr-10 py-2.5 bg-slate-50 border rounded-xl text-sm placeholder-slate-400 text-slate-900 focus:outline-none focus:ring-2 transition-all ${
-                    errors.confirmPassword
-                      ? 'border-red-300 focus:ring-red-500 bg-red-50/30'
-                      : 'border-slate-200 focus:ring-brand-500 focus:bg-white'
-                  }`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword((prev) => !prev)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {errors.confirmPassword && (
-                <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.confirmPassword.message}</p>
-              )}
+            {errorMsg && (
+              <p className="text-xs text-red-500 font-medium mt-2 pl-1 animate-fadeIn">
+                {errorMsg}
+              </p>
+            )}
+
+            {/* Test hint helper */}
+            <div className="mt-3 p-2.5 bg-orange-50/80 rounded-xl border border-orange-100 flex items-center justify-between text-xs text-amber-900">
+              <span className="font-medium">
+                Staging Test Mobile: <strong>9818979450</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => setPhoneNumber("9818979450")}
+                className="text-[11px] font-bold text-fastor-orange underline ml-2"
+              >
+                Use
+              </button>
             </div>
 
-            {/* Submit */}
+            {/* Primary "Get OTP" Button */}
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 mt-2 border border-transparent rounded-xl shadow-md shadow-brand-500/20 text-sm font-bold text-white bg-brand-600 hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 disabled:opacity-60 transition-all"
+              disabled={loading}
+              className="w-full mt-6 py-4 rounded-2xl bg-fastor-orange text-white text-base font-bold tracking-wide shadow-button hover:bg-fastor-orange-hover active:scale-[0.99] transition-all flex items-center justify-center disabled:opacity-75 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? (
+              {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Creating Account...</span>
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  <span>Sending OTP...</span>
                 </>
               ) : (
-                <>
-                  <span>Create Counselor Account</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
+                "Get OTP"
               )}
             </button>
-          </form>
 
-          <div className="mt-6 text-center text-xs text-slate-600">
-            Already have an account?{' '}
-            <Link to="/login" className="font-bold text-brand-600 hover:text-brand-700 hover:underline">
-              Sign in here
-            </Link>
-          </div>
+            {/* Terms and conditions subtext matching Figma */}
+            <p className="text-[11px] text-gray-400 text-center mt-3 leading-tight">
+              By clicking, I accept the{" "}
+              <span className="font-semibold text-gray-600 cursor-pointer hover:underline">
+                Terms & Conditions
+              </span>{" "}
+              and{" "}
+              <span className="font-semibold text-gray-600 cursor-pointer hover:underline">
+                Privacy Policy
+              </span>
+            </p>
+          </form>
+        </div>
+
+        {/* Numeric Keypad at bottom matching Figma */}
+        <div className="mt-1">
+          <NumericKeypad onKeyPress={handleKeyPress} onDelete={handleDelete} />
         </div>
       </div>
+
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast({ message: "", type: "info" })}
+      />
     </div>
   );
 };

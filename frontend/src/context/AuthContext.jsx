@@ -1,107 +1,79 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authApi } from '../services/api';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
+  const [token, setToken] = useState(() => localStorage.getItem('fastor_token') || null);
   const [user, setUser] = useState(() => {
     try {
-      const savedUser = localStorage.getItem('crm_user');
-      return savedUser ? JSON.parse(savedUser) : null;
+      const stored = localStorage.getItem('fastor_user');
+      return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
     }
   });
+  const [pendingPhone, setPendingPhone] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('fastor_pending_phone');
+      return stored ? JSON.parse(stored) : { phone: '9818979450', dialCode: '+91' };
+    } catch {
+      return { phone: '9818979450', dialCode: '+91' };
+    }
+  });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [token, setToken] = useState(() => localStorage.getItem('crm_token') || null);
-  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    // Validate token existence on mount
+    const savedToken = localStorage.getItem('fastor_token');
+    const savedUser = localStorage.getItem('fastor_user');
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('crm_token');
-    localStorage.removeItem('crm_user');
-    setToken(null);
-    setUser(null);
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch {
+        setUser(null);
+      }
+    }
+    setIsLoading(false);
   }, []);
 
-  // Sync and verify current user on mount if token exists
-  useEffect(() => {
-    const initAuth = async () => {
-      const existingToken = localStorage.getItem('crm_token');
-      if (existingToken) {
-        try {
-          const res = await authApi.getMe();
-          if (res.success && res.data) {
-            setUser(res.data);
-            localStorage.setItem('crm_user', JSON.stringify(res.data));
-          }
-        } catch (error) {
-          console.warn('[AuthContext] Session expired or invalid token:', error.message);
-          logout();
-        }
-      }
-      setLoading(false);
-    };
-
-    initAuth();
-
-    // Event listener for unauthorized responses
-    const handleAuthExpired = () => {
-      logout();
-    };
-
-    window.addEventListener('crm-auth-expired', handleAuthExpired);
-    return () => {
-      window.removeEventListener('crm-auth-expired', handleAuthExpired);
-    };
-  }, [logout]);
-
-  const login = async (credentials) => {
-    const res = await authApi.login(credentials);
-    if (res.success && res.data) {
-      const { token: newToken, employee } = res.data;
-      localStorage.setItem('crm_token', newToken);
-      localStorage.setItem('crm_user', JSON.stringify(employee));
-      setToken(newToken);
-      setUser(employee);
-      return employee;
-    }
-    throw new Error(res.message || 'Login failed');
+  const savePendingPhone = (data) => {
+    setPendingPhone(data);
+    sessionStorage.setItem('fastor_pending_phone', JSON.stringify(data));
   };
 
-  const register = async (userData) => {
-    const res = await authApi.register(userData);
-    if (res.success && res.data) {
-      const { token: newToken, employee } = res.data;
-      localStorage.setItem('crm_token', newToken);
-      localStorage.setItem('crm_user', JSON.stringify(employee));
-      setToken(newToken);
-      setUser(employee);
-      return employee;
-    }
-    throw new Error(res.message || 'Registration failed');
+  const login = (userData, jwtToken) => {
+    setUser(userData);
+    setToken(jwtToken);
+    localStorage.setItem('fastor_token', jwtToken);
+    localStorage.setItem('fastor_user', JSON.stringify(userData));
   };
 
-  const refreshUser = async () => {
-    try {
-      const res = await authApi.getMe();
-      if (res.success && res.data) {
-        setUser(res.data);
-        localStorage.setItem('crm_user', JSON.stringify(res.data));
-      }
-    } catch (err) {
-      console.warn('[AuthContext] Failed to refresh user profile:', err);
-    }
+  const logout = () => {
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem('fastor_token');
+    localStorage.removeItem('fastor_user');
+    sessionStorage.removeItem('fastor_pending_phone');
+  };
+
+  const updateUser = (updatedData) => {
+    const updated = { ...user, ...updatedData };
+    setUser(updated);
+    localStorage.setItem('fastor_user', JSON.stringify(updated));
   };
 
   const value = {
     user,
     token,
-    loading,
-    isAuthenticated: Boolean(token && user),
+    isAuthenticated: Boolean(token),
+    pendingPhone,
+    savePendingPhone,
     login,
-    register,
     logout,
-    refreshUser,
+    updateUser,
+    isLoading,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
